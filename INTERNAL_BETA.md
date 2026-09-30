@@ -2,6 +2,7 @@
 
 ## 1. 当前内测架构
 
+- 内测地址：<https://web-khaki-mu-lkn2tzajva.vercel.app>
 - 部署内容：现有 Vite 前端，推荐部署到 Vercel。
 - 调用方式：测试用户在设置中填写自己的 API Base URL、API Key 和模型，浏览器直接调用对应接口。
 - 数据位置：API 配置、画布、素材和生成记录默认保存在该用户当前浏览器本地。
