@@ -7,6 +7,8 @@ description: Implemented changes that still need manual verification
 
 The current release needs manual verification in these areas:
 
+- Vercel frontend-only deployment: deploying from the `web` directory should complete even when the repository-root `VERSION` and `CHANGELOG.md` files are outside the uploaded deployment scope. Local development from the full repository should continue using the root version and release history.
+
 - Buyer Show skill-owned image settings: after choosing 买家秀设计, the composer toolbar should not show the general image ratio/count settings button. Multi-scene and Same-scene modes should continue to use the skill's 3:4 and three-image defaults, while Reference-angle Variation should use five images. Other skills and direct Image mode should continue showing their existing image settings control.
 
 - Unified commerce-assistant shell without duplicate analysis: after Product Hero, Detail Page, Buyer Show, or Competitor Recreation finishes analysis, the panel should show the user bubble followed directly by the shared structured analysis/plan UI. It must not insert a separate assistant paragraph containing the same summary and visual strategy above the structured card. Older restored conversations containing that exact duplicate paragraph should hide it as well. Clarifying questions, errors, skill-switch notices, and generation completion messages should remain visible.

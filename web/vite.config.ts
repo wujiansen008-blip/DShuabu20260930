@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
@@ -7,8 +7,11 @@ import { defineConfig, type Plugin } from "vite";
 import { parseChangelog } from "./src/lib/release";
 
 const webDir = dirname(fileURLToPath(import.meta.url));
-const localVersion = readFileSync(resolve(webDir, "../VERSION"), "utf8").trim() || "dev";
-const localChangelog = readFileSync(resolve(webDir, "../CHANGELOG.md"), "utf8");
+const rootVersionPath = resolve(webDir, "../VERSION");
+const rootChangelogPath = resolve(webDir, "../CHANGELOG.md");
+const packageVersion = JSON.parse(readFileSync(resolve(webDir, "package.json"), "utf8")).version;
+const localVersion = (existsSync(rootVersionPath) ? readFileSync(rootVersionPath, "utf8").trim() : packageVersion) || "dev";
+const localChangelog = existsSync(rootChangelogPath) ? readFileSync(rootChangelogPath, "utf8") : "";
 
 // Expose /plugins/index.json with local plugin files from public/plugins.
 // The frontend can discover and list them when enabled; development reads the directory live, while builds emit a static registry.
