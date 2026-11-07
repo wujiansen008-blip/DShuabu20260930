@@ -113,8 +113,9 @@ export function CommerceAssistantPanel({ onOpenLocalAgent }: { onOpenLocalAgent:
     const filteredSkills = useMemo(() => allSkills.filter((item) => (skillTab === "system" ? !item.id.startsWith("custom:") : skillTab === "mine" ? item.id.startsWith("custom:") : true) && `${item.title}${item.description}`.toLowerCase().includes(query.trim().toLowerCase())), [allSkills, query, skillTab]);
     const textConfig = buildGenerationConfig(config, undefined, "text");
     // 规划请求统一走网关：内置技能方法论只存在于服务端，前端发送的只是 {{GUIDE:id}} 占位符。
+    // gatewayUpstream 把用户自己配的通道带过去，网关没配 UPSTREAM_BASE 时就转发到它。
     // VITE_GATEWAY_OFF=1 时直连界面里配置的通道，仅供本地调试。
-    const planGatewayConfig = GATEWAY_ENABLED ? { ...textConfig, baseUrl: GATEWAY_BASE_URL } : textConfig;
+    const planGatewayConfig = GATEWAY_ENABLED ? { ...textConfig, baseUrl: GATEWAY_BASE_URL, gatewayUpstream: textConfig.baseUrl } : textConfig;
     const imageConfig = buildGenerationConfig(config, undefined, "image");
     const videoConfig = buildGenerationConfig(config, undefined, "video");
     const videoCapabilities = videoModelCapabilities(config, config.videoModel);

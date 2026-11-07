@@ -21,6 +21,14 @@ export function resolveAiApiKey(apiKey: string) {
 /** Gemini 协议的网关基址（含 /v1beta），空串表示不走网关。 */
 export const GATEWAY_GEMINI_BASE = GATEWAY_AI_ENABLED ? `${GATEWAY_BASE_URL}/v1beta` : "";
 
+/**
+ * 网关自己没配上游时，用它随请求带来的地址转发。
+ * 阶段一（同事自带 key）靠这个做到「网关零配置即可用」，也不会把某家供应商写死在代码里。
+ */
+export function gatewayUpstreamHeader(config: { gatewayUpstream?: string }): Record<string, string> {
+    return config.gatewayUpstream ? { "x-canvas-upstream": config.gatewayUpstream } : {};
+}
+
 /** 统一出口模式下「没有 key 也算配置好了」，由网关持有 key。 */
 export function isAiKeyConfigured(apiKey: string) {
     return GATEWAY_AI_ENABLED || Boolean(apiKey.trim());

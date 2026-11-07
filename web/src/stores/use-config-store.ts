@@ -44,6 +44,8 @@ export type AiConfig = {
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
+    /** 仅在请求被改写到网关时携带：告诉网关这次该转发到哪个上游（同事自带 key 阶段用）。 */
+    gatewayUpstream?: string;
     channels: ModelChannel[];
     model: string;
     imageModel: string;

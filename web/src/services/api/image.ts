@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { gatewayCodeHeader } from "@/lib/access-code";
-import { GATEWAY_GEMINI_BASE, resolveAiApiKey, resolveAiBaseUrl } from "./ai-route";
+import { GATEWAY_GEMINI_BASE, gatewayUpstreamHeader, resolveAiApiKey, resolveAiBaseUrl } from "./ai-route";
 import { imageToDataUrl } from "@/services/image-storage";
 import { imageSizePresets, inferMediaScale } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
@@ -360,11 +360,12 @@ function aiApiUrl(config: Pick<AiConfig, "baseUrl">, path: string) {
     return buildApiUrl(resolveAiBaseUrl(config.baseUrl), path);
 }
 
-function aiHeaders(config: Pick<AiConfig, "baseUrl" | "apiKey">, contentType?: string) {
+function aiHeaders(config: Pick<AiConfig, "baseUrl" | "apiKey" | "gatewayUpstream">, contentType?: string): Record<string, string> {
     const apiKey = resolveAiApiKey(config.apiKey);
     return {
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         ...gatewayCodeHeader(resolveAiBaseUrl(config.baseUrl)),
+        ...gatewayUpstreamHeader(config),
         ...(contentType ? { "Content-Type": contentType } : {}),
     };
 }

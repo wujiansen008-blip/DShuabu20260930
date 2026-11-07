@@ -53,6 +53,35 @@ function sendJson(res, status, payload) {
     res.end(JSON.stringify(payload));
 }
 
+// 阶段一（同事自带 key）：网关没配上游时，按请求带来的地址转发。
+// 必须挡住内网地址，否则网关就成了一个可被用来探测内网的开放代理。
+function normalizeClientUpstream(raw) {
+    const value = String(raw || "").trim();
+    if (!value) return "";
+    let url;
+    try {
+        url = new URL(value);
+    } catch {
+        return "";
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") return "";
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
+    const isPrivate =
+        host === "localhost" ||
+        host === "0.0.0.0" ||
+        host === "::1" ||
+        /^127\./.test(host) ||
+        /^10\./.test(host) ||
+        /^192\.168\./.test(host) ||
+        /^169\.254\./.test(host) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
+        host.endsWith(".local") ||
+        host.endsWith(".internal");
+    if (isPrivate) return "";
+    const path = url.pathname.replace(/\/+$/, "");
+    return `${url.origin}${path}`;
+}
+
 export function createGateway(options = {}) {
     const env = options.env || process.env;
     const upstreamBase = String(options.upstreamBase ?? env.UPSTREAM_BASE ?? "").replace(/\/+$/, "");
@@ -163,7 +192,7 @@ export function createGateway(options = {}) {
 
         // 健康检查与插件源不需要访问码，也不依赖上游 AI 配置。
         if (req.method === "GET" && requestUrl.pathname === "/__health") {
-            sendJson(res, 200, { ok: true, upstream: Boolean(upstreamBase), codeRequired: requireCode, guides: Object.keys(commerceGuides) });
+            sendJson(res, 200, { ok: true, upstream: Boolean(upstreamBase), acceptsClientUpstream: true, codeRequired: requireCode, guides: Object.keys(commerceGuides) });
             return;
         }
         if (req.method === "GET" && requestUrl.pathname === "/__official-plugins.json") {
@@ -206,8 +235,11 @@ export function createGateway(options = {}) {
             caller = name;
         }
 
-        if (!upstreamBase) {
-            sendJson(res, 500, { error: "网关未配置 UPSTREAM_BASE" });
+        // 上游优先级：网关环境变量 > 请求自带（仅当网关没配）。自带地址做了内网过滤。
+        const clientUpstream = normalizeClientUpstream(req.headers["x-canvas-upstream"]);
+        const effectiveUpstream = upstreamBase || clientUpstream;
+        if (!effectiveUpstream) {
+            sendJson(res, 500, { error: "网关未配置 UPSTREAM_BASE，且请求未携带合法的 x-canvas-upstream", code: "no_upstream" });
             return;
         }
 
@@ -236,6 +268,7 @@ export function createGateway(options = {}) {
         delete headers["accept-encoding"];
         delete headers["x-canvas-token"];
         delete headers[CODE_HEADER];
+        delete headers["x-canvas-upstream"];
         if (upstreamKey) {
             headers.authorization = `Bearer ${upstreamKey}`;
             // Gemini 协议用 x-goog-api-key 鉴权。仅当原请求就是 Gemini 请求时才补，
@@ -245,7 +278,7 @@ export function createGateway(options = {}) {
         }
 
         try {
-            const upstream = await fetch(`${upstreamBase}${path}`, {
+            const upstream = await fetch(`${effectiveUpstream}${path}`, {
                 method: req.method,
                 headers,
                 body: req.method === "GET" || req.method === "HEAD" ? undefined : body,
