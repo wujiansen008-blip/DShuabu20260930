@@ -1,7 +1,12 @@
 {
   "framework": "vite",
   "installCommand": "cd web && bun install",
-  "buildCommand": "cd web && bun run build",
+  "buildCommand": "cd web && bun run build:dist",
   "outputDirectory": "web/dist",
+  "functions": {
+    "api/[...path].mjs": {
+      "maxDuration": 60
+    }
+  },
   "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }

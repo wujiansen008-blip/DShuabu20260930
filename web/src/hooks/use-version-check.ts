@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { App } from "antd";
 import { useTranslation } from "react-i18next";
-import { APP_VERSION } from "@/constant/env";
+import { APP_VERSION, HIDE_SOURCE_LINKS } from "@/constant/env";
 import { parseChangelog, type ReleaseInfo } from "@/lib/release";
 
-const latestVersionUrl = "https://raw.githubusercontent.com/basketikun/infinite-canvas/main/VERSION";
-const latestChangelogUrl = "https://raw.githubusercontent.com/basketikun/infinite-canvas/main/CHANGELOG.md";
+// 分发构建不下发上游仓库地址，版本检查整体关闭，只保留包内自带的更新记录。
+const latestVersionUrl = HIDE_SOURCE_LINKS ? "" : "https://raw.githubusercontent.com/basketikun/infinite-canvas/main/VERSION";
+const latestChangelogUrl = HIDE_SOURCE_LINKS ? "" : "https://raw.githubusercontent.com/basketikun/infinite-canvas/main/CHANGELOG.md";
 
 function readLocalReleases(): ReleaseInfo[] {
     return __APP_RELEASES__ || [];
@@ -35,6 +36,7 @@ export function useVersionCheck() {
     const hasNewVersion = isNewerVersion(latestVersion, currentVersion);
 
     const checkLatestVersion = useCallback(async () => {
+        if (!latestVersionUrl) return false;
         try {
             const response = await fetch(latestVersionUrl);
             if (!response.ok) return false;
@@ -48,6 +50,7 @@ export function useVersionCheck() {
 
     const checkLatestRelease = useCallback(
         async (showMessage = false) => {
+            if (!latestVersionUrl || !latestChangelogUrl) return false;
             setChecking(true);
             try {
                 const [versionResponse, changelogResponse] = await Promise.all([fetch(latestVersionUrl), fetch(latestChangelogUrl)]);

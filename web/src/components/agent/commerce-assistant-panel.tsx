@@ -4,6 +4,7 @@ import { ArrowLeft, ArrowUp, BookOpen, Bot, Box, Check, ChevronDown, ChevronUp, 
 import { nanoid } from "nanoid";
 
 import { canvasThemes } from "@/lib/canvas-theme";
+import { GATEWAY_BASE_URL, GATEWAY_ENABLED } from "@/constant/env";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
 import { ModelPicker } from "@/components/model-picker";
 import { imageAspectOptions } from "@/components/image-settings-panel";
@@ -111,6 +112,9 @@ export function CommerceAssistantPanel({ onOpenLocalAgent }: { onOpenLocalAgent:
     const projectId = useAgentStore((state) => state.canvasContext?.snapshot.projectId || "");
     const filteredSkills = useMemo(() => allSkills.filter((item) => (skillTab === "system" ? !item.id.startsWith("custom:") : skillTab === "mine" ? item.id.startsWith("custom:") : true) && `${item.title}${item.description}`.toLowerCase().includes(query.trim().toLowerCase())), [allSkills, query, skillTab]);
     const textConfig = buildGenerationConfig(config, undefined, "text");
+    // 规划请求统一走网关：内置技能方法论只存在于服务端，前端发送的只是 {{GUIDE:id}} 占位符。
+    // VITE_GATEWAY_OFF=1 时直连界面里配置的通道，仅供本地调试。
+    const planGatewayConfig = GATEWAY_ENABLED ? { ...textConfig, baseUrl: GATEWAY_BASE_URL } : textConfig;
     const imageConfig = buildGenerationConfig(config, undefined, "image");
     const videoConfig = buildGenerationConfig(config, undefined, "video");
     const videoCapabilities = videoModelCapabilities(config, config.videoModel);
@@ -453,7 +457,7 @@ export function CommerceAssistantPanel({ onOpenLocalAgent }: { onOpenLocalAgent:
                     { type: "image_url" as const, image_url: { url: dataUrl } },
                 ]),
             ];
-            const response = await requestImageQuestion(textConfig, [{ role: "system", content: planSystemPrompt }, { role: "user", content }], () => undefined, { signal: controller.signal });
+            const response = await requestImageQuestion(planGatewayConfig, [{ role: "system", content: planSystemPrompt }, { role: "user", content }], () => undefined, { signal: controller.signal });
             const parsed = parsePlanResponse(response);
             if ("questions" in parsed) {
                 setMessages((current) => [...current, { id: nanoid(), role: "assistant", text: parsed.questions.join("\n") }]);
@@ -565,10 +569,10 @@ export function CommerceAssistantPanel({ onOpenLocalAgent }: { onOpenLocalAgent:
                 const cleanupIds = [textId, configId];
                 let outputNodeId = targetPlan.items.find((entry) => entry.id === item.id)?.outputNodeId;
                 let errorDetails: string | undefined;
+                const liveNodes = useAgentStore.getState().canvasContext?.snapshot.nodes || [];
+                const oldNode = outputNodeId ? liveNodes.find((node) => node.id === outputNodeId) : undefined;
                 if (result.nodeId) {
-                    const liveNodes = useAgentStore.getState().canvasContext?.snapshot.nodes || [];
                     const resultNode = liveNodes.find((node) => node.id === result.nodeId);
-                    const oldNode = outputNodeId ? liveNodes.find((node) => node.id === outputNodeId) : undefined;
                     errorDetails = resultNode?.metadata?.errorDetails;
                     if (result.status === "success" && resultNode && oldNode && oldNode.id !== resultNode.id) {
                         const versions = mergeImageVersions(oldNode, resultNode);

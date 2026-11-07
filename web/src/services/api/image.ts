@@ -6,6 +6,8 @@ import { normalizePluginImages, runModelPlugin } from "./model-plugin";
 import { nanoid } from "nanoid";
 import { dataUrlToFile } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
+import { gatewayCodeHeader } from "@/lib/access-code";
+import { GATEWAY_GEMINI_BASE, resolveAiApiKey, resolveAiBaseUrl } from "./ai-route";
 import { imageToDataUrl } from "@/services/image-storage";
 import { imageSizePresets, inferMediaScale } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
@@ -354,13 +356,15 @@ function withSystemPrompt(config: AiConfig, prompt: string) {
     return systemPrompt ? `${systemPrompt}\n\n${prompt}` : prompt;
 }
 
-function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+function aiApiUrl(config: Pick<AiConfig, "baseUrl">, path: string) {
+    return buildApiUrl(resolveAiBaseUrl(config.baseUrl), path);
 }
 
-function aiHeaders(config: AiConfig, contentType?: string) {
+function aiHeaders(config: Pick<AiConfig, "baseUrl" | "apiKey">, contentType?: string) {
+    const apiKey = resolveAiApiKey(config.apiKey);
     return {
-        Authorization: `Bearer ${config.apiKey}`,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...gatewayCodeHeader(resolveAiBaseUrl(config.baseUrl)),
         ...(contentType ? { "Content-Type": contentType } : {}),
     };
 }
@@ -376,14 +380,17 @@ function geminiModelName(model: string) {
 }
 
 function geminiApiUrl(config: Pick<AiConfig, "baseUrl" | "model">, action?: "generateContent" | "streamGenerateContent") {
-    const baseUrl = geminiBaseUrl(config);
-    if (!action) return withLocalProxy(`${baseUrl}/models`);
-    return withLocalProxy(`${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`);
+    const suffix = action ? `/models/${encodeURIComponent(geminiModelName(config.model))}:${action}` : "/models";
+    // 统一出口模式：Gemini 协议原样带上 /v1beta，由网关按原路径转发，不做前缀改写。
+    if (GATEWAY_GEMINI_BASE) return `${GATEWAY_GEMINI_BASE}${suffix}`;
+    return withLocalProxy(`${geminiBaseUrl(config)}${suffix}`);
 }
 
-function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
+function geminiHeaders(config: Pick<AiConfig, "apiKey" | "baseUrl">) {
+    const apiKey = resolveAiApiKey(config.apiKey);
     return {
-        "x-goog-api-key": config.apiKey,
+        ...(apiKey ? { "x-goog-api-key": apiKey } : {}),
+        ...gatewayCodeHeader(resolveAiBaseUrl(config.baseUrl)),
         "Content-Type": "application/json",
     };
 }
@@ -931,10 +938,8 @@ export async function fetchImageModels(config: Pick<AiConfig, "baseUrl" | "apiKe
                 .filter((id): id is string => Boolean(id))
                 .sort((a, b) => a.localeCompare(b));
         }
-        const response = await axios.get<{ data?: Array<{ id?: string }>; error?: { message?: string } }>(buildApiUrl(config.baseUrl, "/models"), {
-            headers: {
-                Authorization: `Bearer ${config.apiKey}`,
-            },
+        const response = await axios.get<{ data?: Array<{ id?: string }>; error?: { message?: string } }>(aiApiUrl(config, "/models"), {
+            headers: aiHeaders(config),
         });
         return (response.data.data || [])
             .map((model) => model.id)

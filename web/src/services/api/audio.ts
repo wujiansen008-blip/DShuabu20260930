@@ -5,17 +5,21 @@ import { audioMimeType, normalizeAudioFormatValue, normalizeAudioSpeedValue, nor
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { buildApiUrl, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
+import { isAiKeyConfigured, resolveAiApiKey, resolveAiBaseUrl } from "./ai-route";
+import { gatewayCodeHeader } from "@/lib/access-code";
 
 type RequestOptions = { signal?: AbortSignal };
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    return buildApiUrl(resolveAiBaseUrl(config.baseUrl), path);
 }
 
 function aiHeaders(config: AiConfig) {
+    const apiKey = resolveAiApiKey(config.apiKey);
     return {
-        Authorization: `Bearer ${config.apiKey}`,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...gatewayCodeHeader(resolveAiBaseUrl(config.baseUrl)),
         "Content-Type": "application/json",
     };
 }
@@ -27,8 +31,8 @@ export async function requestAudioGeneration(config: AiConfig, prompt: string, o
     const script = resolveModelScript(config, config.model || config.audioModel);
     if (script) {
         if (!model) throw new Error(apiText("audioModelRequired"));
-        if (!requestConfig.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
-        if (!requestConfig.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+        if (!resolveAiBaseUrl(requestConfig.baseUrl).trim()) throw new Error(apiText("baseUrlRequired"));
+        if (!isAiKeyConfigured(requestConfig.apiKey)) throw new Error(apiText("apiKeyRequired"));
         try {
             const result = await runModelPlugin({
                 capability: "audio",
@@ -87,8 +91,8 @@ export async function storeGeneratedAudio(blob: Blob, format = "mp3"): Promise<U
 
 function assertAudioConfig(config: AiConfig, model: string) {
     if (!model) throw new Error(apiText("audioModelRequired"));
-    if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
-    if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+    if (!resolveAiBaseUrl(config.baseUrl).trim()) throw new Error(apiText("baseUrlRequired"));
+    if (!isAiKeyConfigured(config.apiKey)) throw new Error(apiText("apiKeyRequired"));
     if (config.apiFormat === "gemini") throw new Error(apiText("geminiAudioUnsupported"));
 }
 

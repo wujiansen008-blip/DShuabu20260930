@@ -2,6 +2,8 @@ import axios, { type AxiosRequestConfig } from "axios";
 
 import i18n from "@/i18n";
 import { buildApiUrl, withLocalProxy, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
+import { resolveAiApiKey, resolveAiBaseUrl } from "./ai-route";
+import { gatewayCodeHeader } from "@/lib/access-code";
 
 type RequestOptions = { signal?: AbortSignal };
 
@@ -41,7 +43,18 @@ function pluginHeaders(extra?: Record<string, string>, hasJsonBody = false): Rec
 
 function pluginUrl(config: AiConfig, path: string) {
     if (/^https?:/i.test(path)) return withLocalProxy(path);
-    return buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
+    const baseUrl = resolveAiBaseUrl(config.baseUrl);
+    const url = buildApiUrl(baseUrl, path.startsWith("/") ? path : `/${path}`);
+    return url;
+}
+
+// 统一出口模式下插件请求也必须带访问码，否则网关会直接 401。
+function pluginAuth(config: AiConfig): Record<string, string> {
+    const apiKey = resolveAiApiKey(config.apiKey);
+    return {
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...gatewayCodeHeader(resolveAiBaseUrl(config.baseUrl)),
+    };
 }
 
 function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHttp {
@@ -52,7 +65,7 @@ function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHtt
             url: pluginUrl(config, path),
             data: method === "post" ? body : undefined,
             params: opts?.params,
-            headers: pluginHeaders({ Authorization: `Bearer ${config.apiKey}`, ...opts?.headers }, method === "post" && !isForm && body !== undefined),
+            headers: pluginHeaders({ ...pluginAuth(config), ...opts?.headers }, method === "post" && !isForm && body !== undefined),
             responseType: opts?.responseType || "json",
             signal: options?.signal,
         });

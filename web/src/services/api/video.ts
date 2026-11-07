@@ -8,6 +8,8 @@ import { getMediaBlob, resolveMediaUrl, uploadMediaFile, type UploadedFile } fro
 import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, videoModelCapabilities, withLocalProxy, type AiConfig } from "@/stores/use-config-store";
 import { runModelPlugin } from "./model-plugin";
+import { GATEWAY_GEMINI_BASE, isAiKeyConfigured, resolveAiApiKey, resolveAiBaseUrl } from "./ai-route";
+import { gatewayCodeHeader } from "@/lib/access-code";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
@@ -33,12 +35,14 @@ export type VideoGenerationTaskState = { status: "pending" } | { status: "comple
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
 
 function aiApiUrl(config: AiConfig, path: string) {
-    return buildApiUrl(config.baseUrl, path);
+    return buildApiUrl(resolveAiBaseUrl(config.baseUrl), path);
 }
 
 function aiHeaders(config: AiConfig, contentType?: string) {
+    const apiKey = resolveAiApiKey(config.apiKey);
     return {
-        Authorization: `Bearer ${config.apiKey}`,
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...gatewayCodeHeader(resolveAiBaseUrl(config.baseUrl)),
         ...(contentType ? { "Content-Type": contentType } : {}),
     };
 }
@@ -271,26 +275,34 @@ async function pollGeminiVideoTask(config: AiConfig, task: VideoGenerationTask, 
 
 function assertVideoConfig(config: AiConfig, model: string) {
     if (!model) throw new Error(apiText("videoModelRequired"));
-    if (!config.baseUrl.trim()) throw new Error(apiText("baseUrlRequired"));
-    if (!config.apiKey.trim()) throw new Error(apiText("apiKeyRequired"));
+    if (!resolveAiBaseUrl(config.baseUrl).trim()) throw new Error(apiText("baseUrlRequired"));
+    if (!isAiKeyConfigured(config.apiKey)) throw new Error(apiText("apiKeyRequired"));
 }
 
 function geminiVideoBaseUrl(config: Pick<AiConfig, "baseUrl">) {
+    if (GATEWAY_GEMINI_BASE) return GATEWAY_GEMINI_BASE;
     const normalizedBaseUrl = config.baseUrl.trim().replace(/\/+$/, "");
     const lowerBaseUrl = normalizedBaseUrl.toLowerCase();
     return lowerBaseUrl.endsWith("/v1") || lowerBaseUrl.endsWith("/v1beta") ? normalizedBaseUrl : `${normalizedBaseUrl}/v1beta`;
 }
 
 function geminiVideoUrl(config: Pick<AiConfig, "baseUrl">, model: string, action: string) {
-    return withLocalProxy(`${geminiVideoBaseUrl(config)}/models/${encodeURIComponent(modelOptionName(model).replace(/^models\//, ""))}:${action}`);
+    const path = `${geminiVideoBaseUrl(config)}/models/${encodeURIComponent(modelOptionName(model).replace(/^models\//, ""))}:${action}`;
+    return GATEWAY_GEMINI_BASE ? path : withLocalProxy(path);
 }
 
 function geminiOperationUrl(config: Pick<AiConfig, "baseUrl">, name: string) {
-    return withLocalProxy(`${geminiVideoBaseUrl(config)}/${name.replace(/^\//, "")}`);
+    const path = `${geminiVideoBaseUrl(config)}/${name.replace(/^\//, "")}`;
+    return GATEWAY_GEMINI_BASE ? path : withLocalProxy(path);
 }
 
-function geminiVideoHeaders(config: Pick<AiConfig, "apiKey">) {
-    return { "x-goog-api-key": config.apiKey, "Content-Type": "application/json" };
+function geminiVideoHeaders(config: Pick<AiConfig, "apiKey" | "baseUrl">) {
+    const apiKey = resolveAiApiKey(config.apiKey);
+    return {
+        ...(apiKey ? { "x-goog-api-key": apiKey } : {}),
+        ...gatewayCodeHeader(resolveAiBaseUrl(config.baseUrl)),
+        "Content-Type": "application/json",
+    };
 }
 
 function videoAspectRatio(size: string) {
